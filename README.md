@@ -1,4 +1,4 @@
-# Selective HUD Hider v1.0.0
+# Selective HUD Hider
 
 ## 📖 Description
 The Selective HUD Hider mod allows you to selectively hide elements of the game interface (HUD) to create a clean, minimalistic screen. It is ideal for creating screenshots, recording gameplay without an interface, or just for those who prefer a minimum number of distracting elements on the screen.
