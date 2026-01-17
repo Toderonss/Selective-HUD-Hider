@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <!-- Пути для разных разработчиков -->
+    <BepInExPath Condition="'$(BepInExPath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\PEAK\BepInEx</BepInExPath>
+    <GameManagedPath Condition="'$(GameManagedPath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\PEAK\PEAK_Data\Managed</GameManagedPath>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+</Project>
