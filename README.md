@@ -118,18 +118,22 @@ When you change the scene, all settings are saved.
 ## 📸 Screenshots
 ### Clean Mode (HUD Hidden)
 ![Clean Mode Example](https://i.ibb.co/pgD1PVv/200FCF-1.jpg)
+
 *All HUD elements are hidden, only gameplay remains*
 
 ### Normal Mode (HUD Visible)  
 ![Normal Mode Example](https://i.ibb.co/fGS7H9D8/209000-1.jpg)
+
 *Default game interface with all elements*
 
 ### Custom Stamina Stats
 ![Custom Stamina Stats](https://i.ibb.co/k2TJRCKm/208B35-1.jpg)
+
 *Digital display of stamina and status effects*
 
 ### Configuration Menu
 ![Config Menu](https://i.ibb.co/gFJz8VC9/209D7B-1.jpg)
+
 *Mod configuration in BepInEx Config Manager*
 
 ## 🔧 Technical details
