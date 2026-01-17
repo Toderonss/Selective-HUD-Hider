@@ -14,7 +14,7 @@ using UnityEngine.SceneManagement;
 
 namespace SelectiveHider
 {
-    [BepInPlugin("com.yourname.SelectiveHider", "Selective HUD Hider", "1.0.0")]
+    [BepInPlugin("com.yourname.SelectiveHider", "Selective HUD Hider", "1.0.1")]
     public class SelectiveHiderPlugin : BaseUnityPlugin
     {
         private static class TransparencyManager
@@ -942,6 +942,7 @@ namespace SelectiveHider
         {
             "MoraleBoost",
             "ConnectionLog",
+            "Spectating",
         };
 
         public enum ToggleKey
@@ -1567,6 +1568,14 @@ namespace SelectiveHider
                     // Для анимированных элементов используем прозрачность
                     if (_transparencyElements.Contains(elementName))
                     {
+                        // ОСОБЫЙ СЛУЧАЙ: Spectating - не сохраняем его состояние (как ConnectionLog)
+                        if (elementName != "Spectating" && elementName != "ConnectionLog")
+                        {
+                            // Сохраняем исходное состояние только для тех элементов, которые не управляются игрой
+                            if (!_originalStates.ContainsKey(elementName))
+                                _originalStates[elementName] = child.gameObject.activeSelf;
+                        }
+
                         TransparencyManager.SetTransparent(child.gameObject, true);
                         _currentlyHidden.Add(elementName + "_transparent");
 
@@ -1659,11 +1668,24 @@ namespace SelectiveHider
                         // Для прозрачных элементов - восстанавливаем видимость
                         if (_currentlyHidden.Contains(childName + "_transparent"))
                         {
+                            // ОСОБЫЙ СЛУЧАЙ: Spectating и ConnectionLog - просто убираем прозрачность
+                            // Не восстанавливаем активность, так как игрой
                             TransparencyManager.SetTransparent(child.gameObject, false);
+
+                            // Удаляем из скрытых
+                            _currentlyHidden.Remove(childName + "_transparent");
                         }
                         // Для обычных элементов - восстанавливаем активность
                         else if (_originalStates.TryGetValue(childName, out bool originalState))
                         {
+                            // Для Spectating и ConnectionLog не восстанавливаем активность (их управляет игра)
+                            if (childName == "Spectating" || childName == "ConnectionLog")
+                            {
+                                // Пропускаем - игрой
+                                _currentlyHidden.Remove(childName);
+                                continue;
+                            }
+
                             if (child.gameObject.activeSelf != originalState)
                             {
                                 child.gameObject.SetActive(originalState);
