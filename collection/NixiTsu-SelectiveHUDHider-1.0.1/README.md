@@ -1,4 +1,4 @@
-# Selective HUD Hider
+# Selective HUD Hider v1.0.0
 
 ## 📖 Description
 The Selective HUD Hider mod allows you to selectively hide elements of the game interface (HUD) to create a clean, minimalistic screen. It is ideal for creating screenshots, recording gameplay without an interface, or just for those who prefer a minimum number of distracting elements on the screen.
@@ -76,34 +76,29 @@ Chewy font is licensed under the Apache License 2.0. Full license text is includ
 
 ## ⚠️ Incompatibilities
 ### ❌ Does not work correctly with:
-1.**Leaderboard**
-_Problem:_ The time is not displayed correctly when activating the mod (hiding interface elements).
-
-Link: [Leaderboard on Thunderstore](https://thunderstore.io/c/peak/p/CakeDevs/Leaderboard/)
-
-2.**StaminaStats**
-_Problem:_ The inability to hide the numbers on the bar when activating the mod (or hiding is displayed with suspensions and crashes when in Clear mode for a long time)
-
-_Solve:_ I added a ready-made analogue of the StaminaStats mod, called CustomStaminaStats. Try to use it for the best compatibility with my mod!
-
-Link: [StaminaStats on Thunderstore](https://thunderstore.io/c/peak/p/pixx/StaminaStats/)
-
-### ❓ Partial compatibility
-1.**PeakStats**
-_Problem:_ One of the stamina bars of a player may disappear during the switch from Normal Mode to Clean Mode.
-
-_Solve:_ If you encounter a bug or error, please let me know so that I can fix it!
+1. **PeakStats**
+Problem: When a game event occurs (for example, connecting a new player to the server) with the mod pre-enabled, uncontrolled copying of the stamina begins during the game, which is accompanied by severe freezes.
 
 Link: [PeakStats on Thunderstore](https://thunderstore.io/c/peak/p/nickklmao/PeakStats/)
 
-### ✅ That's what the on/off integration in the config was done with:
-1.**DownedAwareness**
-_Function:_ Hides markers of players who have lost consciousness
+2. **Leaderboard**
+Problem: The time is not displayed correctly when activating the mod (hiding interface elements).
+
+Link: [Leaderboard on Thunderstore](https://thunderstore.io/c/peak/p/CakeDevs/Leaderboard/)
+
+3. **StaminaStats**
+Problem: The inability to hide the numbers on the bar when activating the mod (or hiding is displayed with suspensions and crashes when in Clear mode for a long time)
+
+Link: [StaminaStats on Thunderstore](https://thunderstore.io/c/peak/p/pixx/StaminaStats/)
+
+### ✅ Works correctly with:
+1. **DownedAwareness**
+Function: Hides markers of players who have lost consciousness
 
 Link: [DownedAwareness on Thunderstore](https://thunderstore.io/c/peak/p/LucydDemon/DownedAwareness/)
 
-2.**BetterPingDistance**
-_Function:_ Hides distances from pings
+2. **BetterPingDistance**
+Function: Hides distances from pings
 
 Link: [BetterPingDistance on Thunderstore](https://thunderstore.io/c/peak/p/LucydDemon/BetterPingDistance/)
 
@@ -123,22 +118,18 @@ When you change the scene, all settings are saved.
 ## 📸 Screenshots
 ### Clean Mode (HUD Hidden)
 ![Clean Mode Example](https://i.ibb.co/pgD1PVv/200FCF-1.jpg)
-
 *All HUD elements are hidden, only gameplay remains*
 
 ### Normal Mode (HUD Visible)  
 ![Normal Mode Example](https://i.ibb.co/fGS7H9D8/209000-1.jpg)
-
 *Default game interface with all elements*
 
 ### Custom Stamina Stats
 ![Custom Stamina Stats](https://i.ibb.co/k2TJRCKm/208B35-1.jpg)
-
 *Digital display of stamina and status effects*
 
 ### Configuration Menu
 ![Config Menu](https://i.ibb.co/gFJz8VC9/209D7B-1.jpg)
-
 *Mod configuration in BepInEx Config Manager*
 
 ## 🔧 Technical details
@@ -165,6 +156,8 @@ Check the BepInEx\LogOutput.log file for errors
 
 ### Contacts:
 Author: NixiTsu
+
+Version: 1.0.0
 
 Support: Via comments on the fashion page
 

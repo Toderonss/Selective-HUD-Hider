@@ -11,10 +11,13 @@ using System.Reflection;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using System.Reflection.Emit;
+using System.Collections;
+using SelectiveHider.Patches;
 
 namespace SelectiveHider
 {
-    [BepInPlugin("com.yourname.SelectiveHider", "Selective HUD Hider", "1.0.1")]
+    [BepInPlugin("com.yourname.SelectiveHider", "Selective HUD Hider", "1.0.3")]
     public class SelectiveHiderPlugin : BaseUnityPlugin
     {
         private static class TransparencyManager
@@ -945,6 +948,8 @@ namespace SelectiveHider
             "Spectating",
         };
 
+        private static PeakStatsIntegration _peakStatsIntegration;
+
         public enum ToggleKey
         {
             [Description("F1")] F1,
@@ -1076,12 +1081,17 @@ namespace SelectiveHider
 
         private void Awake()
         {
-            Logger.LogInfo($"Мод {Info.Metadata.Name} v1.0.0 загружен!");
+            Logger.LogInfo($"Мод {Info.Metadata.Name} загружен!");
+
             InitializeConfig();
 
             // Устанавливаем путь к AssetBundle со шрифтом
             string pluginPath = System.IO.Path.GetDirectoryName(Info.Location);
             CustomStaminaStats.SetFontBundlePath(pluginPath);
+
+            // Инициализируем интеграцию с PeakStats
+            _peakStatsIntegration = new PeakStatsIntegration();
+            _peakStatsIntegration.Initialize();
 
             _harmony = new Harmony(Info.Metadata.GUID);
 
@@ -1107,17 +1117,23 @@ namespace SelectiveHider
 
             ForceShowCustomStaminaOnGameScenes(scene);
 
+            // Сбрасываем состояние PeakStats интеграции при загрузке сцены
+            if (_peakStatsIntegration != null)
+            {
+                _peakStatsIntegration.ResetOnSceneLoad();
+            }
+
+            // Очищаем кэш CustomStaminaStats при загрузке Airport или Title
+            if (scene.name == "Airport" || scene.name == "Title")
+            {
+                ClearCustomStaminaCache();
+            }
+
             // Сбрасываем состояние чистого режима если он активен
             if (_isCleanModeActive)
             {
                 _isCleanModeActive = false;
                 Logger.LogInfo("Сброшен чистый режим из-за смены сцены");
-            }
-
-            // Очищаем CustomStaminaStats при загрузке сцены Airport (конец игры) или Title
-            if (scene.name == "Airport" || scene.name == "Title")
-            {
-                ClearCustomStaminaCache();
             }
         }
 
@@ -1264,10 +1280,10 @@ namespace SelectiveHider
                     new ConfigDescription("The thickness of the text outline",
                         new AcceptableValueRange<float>(0.05f, 0.5f), Array.Empty<object>()));
 
-                // EXTRA CANVAS
-                _canvasBetterPingDistanceConfig = Config.Bind("Extra Canvas", "Canvas_BetterPingDistance", false,
+                // Integration with mods                
+                _canvasBetterPingDistanceConfig = Config.Bind("Integration with mods", "Canvas_BetterPingDistance", false,
                     "Hide distances from ping (mod BetterPingDistance)");
-                _canvasPassedOutMarkersConfig = Config.Bind("Extra Canvas", "Canvas_PassedOutMarkers", false,
+                _canvasPassedOutMarkersConfig = Config.Bind("Integration with mods", "Canvas_PassedOutMarkers", false,
                     "Hide the markers of players who have lost consciousness (mod DownedAwareness)");
 
                 // Инициализируем CustomStaminaStats
@@ -1377,9 +1393,16 @@ namespace SelectiveHider
             try
             {
                 CustomStaminaStats.Cleanup();
+
+                // Очищаем PeakStats интеграцию
+                if (_peakStatsIntegration != null)
+                {
+                    _peakStatsIntegration.Cleanup();
+                }
+
                 CancelInvoke(nameof(UpdateCustomStaminaStats));
 
-                // Безопасная отписка от события смены сцены
+                // Безопасная отписка
                 try
                 {
                     UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
@@ -1425,6 +1448,10 @@ namespace SelectiveHider
             if (_timerHeightUIConfig.Value) _managedElements.Add("Timer & Height UI");
         }
 
+        private float _peakStatsUpdateInterval = 1f; // Раз в секунду
+        private float _nextPeakStatsUpdateTime = 0f;
+
+        [Obsolete]
         private void Update()
         {
             if (_configsDirty)
@@ -1443,6 +1470,13 @@ namespace SelectiveHider
                 EnforceCleanMode();
                 _nextCheckTime = Time.time + _currentCheckInterval;
             }
+
+            // Редкое обновление интеграции PeakStats (раз в 5 секунд)
+            if (Time.time >= _nextPeakStatsUpdateTime && _peakStatsIntegration != null && _peakStatsIntegration.IsInitialized)
+            {
+                _peakStatsIntegration.UpdatePeakStatsIntegration();
+                _nextPeakStatsUpdateTime = Time.time + 5f; // Только раз в 5 секунд
+            }
         }
 
         private void ToggleHudMode()
@@ -1454,6 +1488,13 @@ namespace SelectiveHider
                 if (_isCleanModeActive)
                 {
                     Logger.LogInfo("=== АКТИВАЦИЯ ЧИСТОГО РЕЖИМА ===");
+
+                    // Приостанавливаем PeakStats если BarGroup скрыт
+                    if (_barGroupConfig.Value && _peakStatsIntegration != null && _peakStatsIntegration.IsInitialized)
+                    {
+                        _peakStatsIntegration.PausePeakStats();
+                    }
+
                     // Сбрасываем кэш при переключении режимов
                     _cachedCanvasLetterbox = null;
                     ApplyCleanMode();
@@ -1461,7 +1502,14 @@ namespace SelectiveHider
                 else
                 {
                     Logger.LogInfo("=== ВЫХОД ИЗ ЧИСТОГО РЕЖИМА ===");
+
                     ApplyNormalMode();
+
+                    // Возобновляем PeakStats если BarGroup скрыт
+                    if (_barGroupConfig.Value && _peakStatsIntegration != null && _peakStatsIntegration.IsInitialized)
+                    {
+                        _peakStatsIntegration.ResumePeakStats();
+                    }
                 }
             }
             catch (Exception ex)
@@ -1648,10 +1696,25 @@ namespace SelectiveHider
             }
         }
 
+        [Obsolete]
         private void ApplyNormalMode()
         {
             try
             {
+                // Canvas_Letterbox - особый случай, сбрасываем всегда
+                _currentlyHidden.Remove("Canvas_Letterbox");
+                _originalStates.Remove("Canvas_Letterbox");
+
+                // Восстанавливаем согласно настройке
+                if (!_letterboxConfig.Value)
+                {
+                    GameObject canvasLetterbox = GetCanvasLetterbox();
+                    if (canvasLetterbox != null && canvasLetterbox.activeSelf)
+                    {
+                        canvasLetterbox.SetActive(false);
+                    }
+                }
+
                 // Очищаем записи о TheFogRises и TheLavaRises (они должны оставаться неактивными)
                 _currentlyHidden.Remove("TheFogRises");
                 _currentlyHidden.Remove("TheLavaRises");

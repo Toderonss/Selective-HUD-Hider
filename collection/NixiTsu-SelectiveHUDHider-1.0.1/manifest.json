@@ -1,9 +1,9 @@
 {
     "name": "SelectiveHUDHider",
-    "version_number": "1.0.3",
+    "version_number": "1.0.1",
     "description": "mod allows you to selectively hide elements of the game interface (HUD) to create a clean, minimalistic screen.",
     "website_url": "https://github.com/Toderonss/Selective-HUD-Hider",
     "dependencies": [
-        "BepInEx-BepInExPack_PEAK-5.4.2403"
-    ]
+    "BepInEx-BepInExPack_PEAK-5.4.2403"
+]
 }
