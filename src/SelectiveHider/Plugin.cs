@@ -17,7 +17,7 @@ using SelectiveHider.Patches;
 
 namespace SelectiveHider
 {
-    [BepInPlugin("com.yourname.SelectiveHider", "Selective HUD Hider", "1.0.3")]
+    [BepInPlugin("nixi.SelectiveHider", "Selective HUD Hider", "1.0.4")]
     public class SelectiveHiderPlugin : BaseUnityPlugin
     {
         private static class TransparencyManager
@@ -113,6 +113,9 @@ namespace SelectiveHider
             private static bool _showPercent = false;
             private static int _fontSize = 16;
             private static float _outlineThickness = 0.15f;
+            private static TextMeshProUGUI _extraStaminaText;
+            private static float _lastExtraStaminaValue = -1f;
+            private static RectTransform _extraStaminaBarRect; // кэш для полоски ExtraStaminaBar
 
             // Текстовые элементы
             private static Dictionary<CharacterAfflictions.STATUSTYPE, TextMeshProUGUI> _statusTexts = new Dictionary<CharacterAfflictions.STATUSTYPE, TextMeshProUGUI>();
@@ -142,7 +145,10 @@ namespace SelectiveHider
                 { CharacterAfflictions.STATUSTYPE.Hot, new Color(1f, 0.3f, 0.1f) },
                 { CharacterAfflictions.STATUSTYPE.Thorns, new Color(0.4f, 0.5f, 0f) },
                 { CharacterAfflictions.STATUSTYPE.Spores, new Color(0.6f, 0.35f, 0.4f) },
-                { CharacterAfflictions.STATUSTYPE.Web, new Color(0.9f, 0.9f, 0.9f) }
+                { CharacterAfflictions.STATUSTYPE.Web, new Color(0.9f, 0.9f, 0.9f) },
+                { CharacterAfflictions.STATUSTYPE.Arrow, new Color(0.7f, 0.7f, 0.7f) },        // серый
+                { CharacterAfflictions.STATUSTYPE.Petrify, new Color(0.5213f, 0.5476f, 0.6698f) },     // каменный
+                { CharacterAfflictions.STATUSTYPE.FlyTrap, new Color(0.2f, 0.8f, 0.2f) }      // зелёный
             };
 
             // Шрифт игры
@@ -198,6 +204,12 @@ namespace SelectiveHider
                     {
                         _staminaText.text = "";
                     }
+
+                    if (_extraStaminaText != null)
+                        _extraStaminaText.text = "";
+
+                    _extraStaminaBarRect = null;
+                    _lastExtraStaminaValue = -1f;
 
                     // Сбрасываем кэшированные значения
                     _lastStaminaValue = -1f;
@@ -440,7 +452,74 @@ namespace SelectiveHider
                     text.outlineColor = Color.black;
                 }
             }
+            private static void UpdateExtraStaminaText()
+            {
+                if (_observedCharacter == null || _staminaBar == null) return;
 
+                try
+                {
+                    float extraStamina = _observedCharacter.data.extraStamina;
+                    bool shouldShow = extraStamina > 0.01f
+                                      && _staminaBar.extraBar != null
+                                      && _staminaBar.extraBar.gameObject.activeSelf;
+
+                    if (!shouldShow)
+                    {
+                        if (_extraStaminaText != null)
+                            _extraStaminaText.gameObject.SetActive(false);
+                        return;
+                    }
+
+                    // Используем именно заполняемую часть (она меняет ширину)
+                    RectTransform fillRect = _staminaBar.extraBarStamina;
+                    if (fillRect == null)
+                    {
+                        // fallback – если по какой-то причине extraBarStamina нет, используем сам extraBar
+                        fillRect = _staminaBar.extraBar;
+                    }
+                    if (fillRect == null)
+                    {
+                        if (_extraStaminaText != null)
+                            _extraStaminaText.gameObject.SetActive(false);
+                        return;
+                    }
+
+                    // Создаём текст, если ещё нет
+                    if (_extraStaminaText == null)
+                    {
+                        _extraStaminaText = CreateTextElement("CustomExtraStaminaText", _canvas.transform,
+                            Vector2.zero, TextAlignmentOptions.Center, _fontSize + 2);
+                        _extraStaminaText.color = new Color(0.749f, 0.9255f, 0.1098f);
+                    }
+
+                    float displayValue = extraStamina * 100f;
+                    if (Math.Abs(displayValue - _lastExtraStaminaValue) > 0.1f || string.IsNullOrEmpty(_extraStaminaText.text))
+                    {
+                        _lastExtraStaminaValue = displayValue;
+                        _extraStaminaText.text = _showPercent ? $"{Math.Round(displayValue, 0):F0}%" : $"{Math.Round(displayValue, 0):F0}";
+                    }
+
+                    // Позиционируем под центром fillRect
+                    Vector3 worldCenter = fillRect.TransformPoint(fillRect.rect.center);
+                    Vector3 screenPos = RectTransformUtility.WorldToScreenPoint(_canvas.worldCamera, worldCenter);
+                    screenPos.y -= 30f; // смещение вниз
+
+                    if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        _canvas.transform as RectTransform,
+                        screenPos,
+                        _canvas.worldCamera,
+                        out Vector2 canvasPos))
+                    {
+                        _extraStaminaText.rectTransform.anchoredPosition = canvasPos;
+                    }
+
+                    _extraStaminaText.gameObject.SetActive(true);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"[CustomStaminaStats] Ошибка обновления Extra Stamina: {ex.Message}");
+                }
+            }
             private static float _lastCleanupTime = 0f;
             private static readonly float CLEANUP_INTERVAL = 5f; // Раз в 5 секунд
 
@@ -458,16 +537,13 @@ namespace SelectiveHider
 
                 try
                 {
-                    // Проверяем принудительное скрытие
                     if (_forceHidden)
                     {
-                        if (_canvas.gameObject.activeSelf)
-                            _canvas.gameObject.SetActive(false);
+                        if (_canvas.gameObject.activeSelf) _canvas.gameObject.SetActive(false);
                         return;
                     }
 
-                    if (!_canvas.gameObject.activeSelf)
-                        _canvas.gameObject.SetActive(true);
+                    if (!_canvas.gameObject.activeSelf) _canvas.gameObject.SetActive(true);
 
                     // Находим текущего персонажа
                     if (_observedCharacter == null || _observedCharacter != Character.observedCharacter)
@@ -493,6 +569,7 @@ namespace SelectiveHider
 
                     // Обновляем тексты
                     UpdateStaminaText();
+                    UpdateExtraStaminaText(); // <-- НОВЫЙ ВЫЗОВ
                     UpdateStatusTexts();
                 }
                 catch (Exception ex)
@@ -677,69 +754,125 @@ namespace SelectiveHider
                     var afflictions = _observedCharacter.refs.afflictions;
                     if (afflictions == null) return;
 
-                    // Проходим по всем типам статусов
                     foreach (CharacterAfflictions.STATUSTYPE statusType in Enum.GetValues(typeof(CharacterAfflictions.STATUSTYPE)))
                     {
-                        float value = afflictions.GetCurrentStatus(statusType) * 100f;
+                        float value;
 
-                        if (value > 0f)
+                        // ---- СПЕЦИАЛЬНО ДЛЯ PETRIFY ----
+                        if (statusType == CharacterAfflictions.STATUSTYPE.Petrify)
                         {
-                            // Ищем BarAffliction
-                            BarAffliction targetAffliction = null;
-                            if (!_cachedAfflictions.TryGetValue(statusType, out targetAffliction) || targetAffliction == null)
+                            // Petrify хранится отдельно в character.data.petrifyAmount (0-100)
+                            value = _observedCharacter.data.petrifyAmount; // уже в процентах, не умножаем
+                        }
+                        else
+                        {
+                            // Все остальные статусы – через GetCurrentStatus (возвращает 0..1)
+                            value = afflictions.GetCurrentStatus(statusType) * 100f;
+                        }
+
+                        // ---- Поиск полоски для Petrify ----
+                        if (statusType == CharacterAfflictions.STATUSTYPE.Petrify)
+                        {
+                            if (_staminaBar.extraBar != null)
                             {
-                                foreach (var affliction in _staminaBar.afflictions)
+                                Transform petrifyTransform = _staminaBar.extraBar.Find("Petrify");
+                                if (petrifyTransform != null && petrifyTransform.gameObject.activeSelf && value > 0f)
                                 {
-                                    if (affliction != null && affliction.gameObject.activeSelf && affliction.afflictionType == statusType)
+                                    // Получаем или создаём текст
+                                    if (!_statusTexts.TryGetValue(statusType, out var text) || text == null)
                                     {
-                                        targetAffliction = affliction;
-                                        _cachedAfflictions[statusType] = affliction;
-                                        break;
+                                        Vector2 tempPos = new Vector2(0f, -200f);
+                                        text = CreateTextElement($"Custom{statusType}Text", _canvas.transform, tempPos);
+                                        if (StatusColors.TryGetValue(statusType, out var color))
+                                            text.color = color;
+                                        _statusTexts[statusType] = text;
                                     }
+
+                                    // Обновляем текст
+                                    float lastValue = 0f;
+                                    _lastStatusValues.TryGetValue(statusType, out lastValue);
+                                    if (Math.Abs(value - lastValue) > 0.1f || string.IsNullOrEmpty(text.text))
+                                    {
+                                        _lastStatusValues[statusType] = value;
+                                        text.text = _showPercent ? $"{Math.Round(value, 0):F0}%" : $"{Math.Round(value, 0):F0}";
+                                    }
+
+                                    // Позиционируем под центром полоски Petrify
+                                    var rect = petrifyTransform as RectTransform;
+                                    if (rect != null)
+                                    {
+                                        Vector3 worldCenter = rect.TransformPoint(rect.rect.center);
+                                        Vector3 screenPos = RectTransformUtility.WorldToScreenPoint(_canvas.worldCamera, worldCenter);
+                                        screenPos.y -= 30f;
+
+                                        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                                            _canvas.transform as RectTransform,
+                                            screenPos,
+                                            _canvas.worldCamera,
+                                            out Vector2 canvasPos))
+                                        {
+                                            text.rectTransform.anchoredPosition = canvasPos;
+                                        }
+                                    }
+
+                                    text.gameObject.SetActive(true);
+                                    continue;
                                 }
                             }
 
-                            if (targetAffliction == null || !targetAffliction.gameObject.activeSelf)
+                            // Если не нашли или значение 0 – скрываем текст
+                            if (_statusTexts.TryGetValue(statusType, out var textToHide) && textToHide != null)
                             {
-                                if (_statusTexts.ContainsKey(statusType))
-                                {
-                                    _statusTexts[statusType].gameObject.SetActive(false);
-                                }
-                                continue;
+                                textToHide.gameObject.SetActive(false);
+                                _lastStatusValues[statusType] = 0f;
                             }
+                            continue;
+                        }
 
-                            // Получаем текущее значение
-                            float lastValue = 0f;
-                            _lastStatusValues.TryGetValue(statusType, out lastValue);
+                        // ---- ВСЕ ОСТАЛЬНЫЕ СТАТУСЫ ----
+                        BarAffliction targetAffliction = null;
+                        foreach (var affliction in _staminaBar.afflictions)
+                        {
+                            if (affliction == null || !affliction.gameObject.activeSelf || affliction.afflictionType != statusType)
+                                continue;
 
-                            // Создаем или получаем текстовый элемент
+                            Transform parent = affliction.transform.parent;
+                            if (parent != null && parent.name == "LayoutGroup")
+                            {
+                                targetAffliction = affliction;
+                                break;
+                            }
+                        }
+
+                        if (value > 0f && targetAffliction != null)
+                        {
                             if (!_statusTexts.TryGetValue(statusType, out var text) || text == null)
                             {
                                 Vector2 tempPos = new Vector2(0f, -200f);
                                 text = CreateTextElement($"Custom{statusType}Text", _canvas.transform, tempPos);
-
                                 if (StatusColors.TryGetValue(statusType, out var color))
                                     text.color = color;
-
                                 _statusTexts[statusType] = text;
                             }
 
-                            // Обновляем текст если значение изменилось
-                            if (Math.Abs(value - lastValue) > 0.1f || text.text == "")
+                            float lastValue = 0f;
+                            _lastStatusValues.TryGetValue(statusType, out lastValue);
+                            if (Math.Abs(value - lastValue) > 0.1f || string.IsNullOrEmpty(text.text))
                             {
                                 _lastStatusValues[statusType] = value;
                                 text.text = _showPercent ? $"{Math.Round(value, 0):F0}%" : $"{Math.Round(value, 0):F0}";
                             }
 
                             text.gameObject.SetActive(true);
-
-                            // Позиционируем (по центру полоски статуса)
                             PositionStatusText(statusType, text, targetAffliction);
                         }
-                        else if (_statusTexts.ContainsKey(statusType))
+                        else
                         {
-                            _statusTexts[statusType].gameObject.SetActive(false);
-                            _lastStatusValues[statusType] = 0f;
+                            if (_statusTexts.TryGetValue(statusType, out var text) && text != null)
+                            {
+                                text.gameObject.SetActive(false);
+                                _lastStatusValues[statusType] = 0f;
+                            }
                         }
                     }
                 }
@@ -765,16 +898,15 @@ namespace SelectiveHider
                     // Конвертируем в экранные координаты
                     var screenPos = RectTransformUtility.WorldToScreenPoint(_canvas.worldCamera, worldCenter);
 
-                    // Позиционируем ПОД полоской
-                    screenPos.y -= 25f;
+                    // Позиционируем ПОД полоской (смещение вниз)
+                    screenPos.y -= 25f; // или 30f, как в PositionStaminaText
 
                     // Конвертируем в координаты Canvas
-                    Vector2 canvasPos;
                     if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
                         _canvas.transform as RectTransform,
                         screenPos,
                         _canvas.worldCamera,
-                        out canvasPos))
+                        out Vector2 canvasPos))
                     {
                         text.rectTransform.anchoredPosition = canvasPos;
                     }
@@ -843,6 +975,17 @@ namespace SelectiveHider
                         UnityEngine.Object.Destroy(_canvas.gameObject);
                         _canvas = null;
                     }
+
+                    if (_extraStaminaText != null)
+                    {
+                        if (_extraStaminaText.material != null)
+                            UnityEngine.Object.Destroy(_extraStaminaText.material);
+                        UnityEngine.Object.Destroy(_extraStaminaText.gameObject);
+                        _extraStaminaText = null;
+                    }
+
+                    _extraStaminaBarRect = null;
+                    _lastExtraStaminaValue = -1f;
 
                     _observedCharacter = null;
                     _staminaBar = null;
@@ -1053,10 +1196,12 @@ namespace SelectiveHider
         private ConfigEntry<bool> _customStaminaShowPercent;
         private ConfigEntry<int> _customStaminaFontSize;
         private ConfigEntry<float> _customStaminaOutline;
+        private static ConfigEntry<float> _mainStaminaVerticalOffsetConfig;
 
         // EXTRA CANVAS
         private ConfigEntry<bool> _canvasBetterPingDistanceConfig;
         private ConfigEntry<bool> _canvasPassedOutMarkersConfig;
+        private ConfigEntry<bool> _canvasPhotonPingCanvasConfig;
 
         private HashSet<string> _managedElements = new HashSet<string>();
         private static Dictionary<string, GameObject> _cachedExtraCanvases = new Dictionary<string, GameObject>();
@@ -1075,9 +1220,35 @@ namespace SelectiveHider
         private KeyCode _currentToggleKey;
         private float _currentCheckInterval;
         private bool _configsDirty = true;
+        private static Dictionary<int, float> _originalStaminaBarY = new Dictionary<int, float>();
         private static Harmony _harmony;
 
         #endregion
+
+        private void ForceUpdateStaminaBarPosition(bool applyOffset)
+        {
+            // Находим все StaminaBar в сцене (обычно один для игрока, но могут быть и другие)
+            StaminaBar[] bars = FindObjectsOfType<StaminaBar>();
+            foreach (StaminaBar bar in bars)
+            {
+                if (bar == null) continue;
+                int id = bar.GetInstanceID();
+                if (!_originalStaminaBarY.ContainsKey(id))
+                {
+                    _originalStaminaBarY[id] = bar.transform.localPosition.y;
+                }
+                float baseY = _originalStaminaBarY[id];
+                float offset = _mainStaminaVerticalOffsetConfig?.Value ?? 0f;
+                bool extraActive = bar.extraBar != null && bar.extraBar.gameObject.activeSelf;
+                float targetY = (extraActive && applyOffset) ? baseY + offset : baseY;
+                // Принудительно устанавливаем позицию без Lerp
+                bar.transform.localPosition = new Vector3(
+                    bar.transform.localPosition.x,
+                    targetY,
+                    bar.transform.localPosition.z
+                );
+            }
+        }
 
         private void Awake()
         {
@@ -1094,6 +1265,11 @@ namespace SelectiveHider
             _peakStatsIntegration.Initialize();
 
             _harmony = new Harmony(Info.Metadata.GUID);
+
+            _harmony.Patch(
+                AccessTools.Method(typeof(StaminaBar), "Update"),
+                postfix: new HarmonyMethod(typeof(SelectiveHiderPlugin), nameof(StaminaBarUpdatePostfix))
+            );
 
             // Подписка на смену сцены для очистки кэша
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
@@ -1114,6 +1290,7 @@ namespace SelectiveHider
             _originalStates.Clear();
             _currentlyHidden.Clear();
             _extraCanvasOriginalStates.Clear();
+            _originalStaminaBarY.Clear();
 
             ForceShowCustomStaminaOnGameScenes(scene);
 
@@ -1129,11 +1306,82 @@ namespace SelectiveHider
                 ClearCustomStaminaCache();
             }
 
+            StartCoroutine(ForceRestoreExtraCanvases());
+
             // Сбрасываем состояние чистого режима если он активен
             if (_isCleanModeActive)
             {
                 _isCleanModeActive = false;
                 Logger.LogInfo("Сброшен чистый режим из-за смены сцены");
+            }
+        }
+
+        private GameObject GetExtraCanvas(string canvasName, bool includeInactive = false)
+        {
+            // Проверяем кэш
+            if (_cachedExtraCanvases.TryGetValue(canvasName, out GameObject cached) && cached != null)
+                return cached;
+
+            GameObject found = null;
+
+            if (includeInactive)
+            {
+                // Ищем среди ВСЕХ объектов (включая неактивные и скрытые в иерархии)
+                GameObject[] allObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (GameObject obj in allObjects)
+                {
+                    if (obj.name == canvasName && obj.scene != null && obj.scene.IsValid())
+                    {
+                        found = obj;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                // Быстрый поиск только активных объектов
+                found = GameObject.Find(canvasName);
+            }
+
+            if (found != null)
+            {
+                _cachedExtraCanvases[canvasName] = found;
+                Logger.LogInfo($"GetExtraCanvas: {canvasName} найден (активен: {found.activeSelf}, includeInactive: {includeInactive})");
+            }
+            else
+            {
+                Logger.LogInfo($"GetExtraCanvas: {canvasName} НЕ найден (includeInactive: {includeInactive})");
+            }
+
+            return found;
+        }
+        
+        private IEnumerator ForceRestoreExtraCanvases()
+        {
+            // Даём сцене время на создание объектов
+            yield return new WaitForSeconds(0.5f);
+
+            string[] canvasNames = { "PhotonPingCanvas", "Canvas_BetterPingDistance", "Canvas_PassedOutMarkers" };
+
+            foreach (string name in canvasNames)
+            {
+                GameObject canvas = GetExtraCanvas(name, true);
+                if (canvas != null)
+                {
+                    if (!canvas.activeSelf)
+                    {
+                        canvas.SetActive(true);
+                        Logger.LogInfo($"ForceRestoreExtraCanvases: {name} включён (был неактивен)");
+                    }
+                    else
+                    {
+                        Logger.LogInfo($"ForceRestoreExtraCanvases: {name} уже активен");
+                    }
+                }
+                else
+                {
+                    Logger.LogInfo($"ForceRestoreExtraCanvases: {name} не найден в сцене");
+                }
             }
         }
 
@@ -1226,6 +1474,10 @@ namespace SelectiveHider
                 _toggleKeyConfig = Config.Bind("General", "Toggle Key", ToggleKey.F1,
                     new ConfigDescription("Клавиша для переключения Чистого режима.", null, Array.Empty<object>()));
 
+                _mainStaminaVerticalOffsetConfig = Config.Bind("General", "MainStaminaVerticalOffset", 10f,
+                new ConfigDescription("Vertical offset for main stamina bar when extra stamina is active (positive = up).",
+                    new AcceptableValueRange<float>(0f, 50f), Array.Empty<object>()));
+
                 _checkIntervalConfig = Config.Bind("General", "Check Interval", 1f,
                     new ConfigDescription("Частота проверок в чистом режиме (в секундах).",
                         new AcceptableValueRange<float>(0.5f, 3f), Array.Empty<object>()));
@@ -1285,6 +1537,8 @@ namespace SelectiveHider
                     "Hide distances from ping (mod BetterPingDistance)");
                 _canvasPassedOutMarkersConfig = Config.Bind("Integration with mods", "Canvas_PassedOutMarkers", false,
                     "Hide the markers of players who have lost consciousness (mod DownedAwareness)");
+                _canvasPhotonPingCanvasConfig = Config.Bind("Integration with mods", "PhotonPingCanvas", false,
+                    "Hide PhotonPingCanvas (mod PhotonPingGUI)");
 
                 // Инициализируем CustomStaminaStats
                 CustomStaminaStats.Initialize(
@@ -1335,6 +1589,7 @@ namespace SelectiveHider
 
                 _canvasBetterPingDistanceConfig.SettingChanged += OnExtraCanvasConfigChanged;
                 _canvasPassedOutMarkersConfig.SettingChanged += OnExtraCanvasConfigChanged;
+                _canvasPhotonPingCanvasConfig.SettingChanged += OnExtraCanvasConfigChanged;
 
                 _currentToggleKey = (KeyCode)Enum.Parse(typeof(KeyCode), _toggleKeyConfig.Value.ToString());
                 _currentCheckInterval = _checkIntervalConfig.Value;
@@ -1519,28 +1774,11 @@ namespace SelectiveHider
                 ApplyNormalMode();
             }
         }
-
-        private GameObject FindExtraCanvas(string canvasName)
-        {
-            if (_cachedExtraCanvases.TryGetValue(canvasName, out GameObject cachedCanvas) && cachedCanvas != null)
-            {
-                return cachedCanvas;
-            }
-
-            GameObject canvas = GameObject.Find(canvasName);
-            if (canvas != null)
-            {
-                _cachedExtraCanvases[canvasName] = canvas;
-            }
-
-            return canvas;
-        }
-
         private void HideExtraCanvas(string canvasName, ConfigEntry<bool> config)
         {
             if (!config.Value) return;
 
-            GameObject canvas = FindExtraCanvas(canvasName);
+            GameObject canvas = GetExtraCanvas(canvasName, false);
             if (canvas != null && canvas.activeSelf)
             {
                 if (!_extraCanvasOriginalStates.ContainsKey(canvasName))
@@ -1555,7 +1793,7 @@ namespace SelectiveHider
 
         private void RestoreExtraCanvas(string canvasName)
         {
-            GameObject canvas = FindExtraCanvas(canvasName);
+            GameObject canvas = GetExtraCanvas(canvasName, false);
             if (canvas != null)
             {
                 if (_extraCanvasOriginalStates.TryGetValue(canvasName, out bool originalState))
@@ -1575,7 +1813,8 @@ namespace SelectiveHider
         {
             foreach (string canvasName in _currentlyHidden.ToList())
             {
-                if (canvasName.StartsWith("Canvas_"))
+                // Восстанавливаем все Canvas, кроме Canvas_Letterbox (он управляется отдельно)
+                if (canvasName != "Canvas_Letterbox")
                 {
                     RestoreExtraCanvas(canvasName);
                 }
@@ -1678,6 +1917,7 @@ namespace SelectiveHider
                 // Скрываем внешние Canvas если конфиги включены
                 HideExtraCanvas("Canvas_BetterPingDistance", _canvasBetterPingDistanceConfig);
                 HideExtraCanvas("Canvas_PassedOutMarkers", _canvasPassedOutMarkersConfig);
+                HideExtraCanvas("PhotonPingCanvas", _canvasPhotonPingCanvasConfig);
 
                 // Скрываем Canvas_Hero
                 ManageCanvasHero(true);
@@ -1687,6 +1927,10 @@ namespace SelectiveHider
 
                 // Мгновенное обновление
                 Canvas.ForceUpdateCanvases();
+                
+                ForceUpdateStaminaBarPosition(true);
+
+                CustomStaminaStats.UpdateAll();
 
                 Logger.LogInfo($"Чистый режим активирован. Скрыто элементов: {_currentlyHidden.Count}");
             }
@@ -1817,6 +2061,10 @@ namespace SelectiveHider
 
                 // Мгновенное обновление
                 Canvas.ForceUpdateCanvases();
+
+                ForceUpdateStaminaBarPosition(true);
+
+                CustomStaminaStats.UpdateAll();
 
                 Logger.LogInfo("Обычный режим восстановлен!");
             }
@@ -2022,9 +2270,6 @@ namespace SelectiveHider
 
             return null;
         }
-
-        //todo: PEAKStats [Unity] NullReferenceException: Object reference not set to an instance of an object
-
         private void EnforceCleanMode()
         {
             if (!_isCleanModeActive) return;
@@ -2140,7 +2385,7 @@ namespace SelectiveHider
                 // Проверяем внешние Canvas
                 if (_canvasBetterPingDistanceConfig.Value)
                 {
-                    GameObject canvas = FindExtraCanvas("Canvas_BetterPingDistance");
+                    GameObject canvas = GetExtraCanvas("Canvas_BetterPingDistance", false);
                     if (canvas != null && canvas.activeSelf)
                     {
                         canvas.SetActive(false);
@@ -2150,11 +2395,20 @@ namespace SelectiveHider
 
                 if (_canvasPassedOutMarkersConfig.Value)
                 {
-                    GameObject canvas = FindExtraCanvas("Canvas_PassedOutMarkers");
+                    GameObject canvas = GetExtraCanvas("Canvas_PassedOutMarkers", false);
                     if (canvas != null && canvas.activeSelf)
                     {
                         canvas.SetActive(false);
                         _currentlyHidden.Add("Canvas_PassedOutMarkers");
+                    }
+                }
+                if (_canvasPhotonPingCanvasConfig.Value)
+                {
+                    GameObject canvas = GetExtraCanvas("PhotonPingCanvas", false);
+                    if (canvas != null && canvas.activeSelf)
+                    {
+                        canvas.SetActive(false);
+                        _currentlyHidden.Add("PhotonPingCanvas");
                     }
                 }
             }
@@ -2162,6 +2416,31 @@ namespace SelectiveHider
             {
                 Logger.LogWarning($"Ошибка EnforceCleanMode: {ex.Message}");
             }
+        }
+        private static float _velocity = 0f;
+
+        private static void StaminaBarUpdatePostfix(StaminaBar __instance)
+        {
+            if (__instance == null) return;
+
+            bool hasExtra = Character.observedCharacter != null && Character.observedCharacter.data.extraStamina > 0.01f;
+            float offset = _mainStaminaVerticalOffsetConfig?.Value ?? 0f;
+
+            float targetY = hasExtra ? -27.5f + offset : -77.5f;
+            float currentY = __instance.transform.localPosition.y;
+
+            // Плавное движение через SmoothDamp
+            float newY = Mathf.SmoothDamp(currentY, targetY, ref _velocity, 0.15f);
+
+            // Если почти достигли цели - ставим точно, чтобы не дрожало
+            if (Mathf.Abs(newY - targetY) < 0.01f)
+                newY = targetY;
+
+            __instance.transform.localPosition = new Vector3(
+                __instance.transform.localPosition.x,
+                newY,
+                __instance.transform.localPosition.z
+            );
         }
     }
 }

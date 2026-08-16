@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
-    <AssemblyName>com.yourname.SelectiveHUDHider</AssemblyName>
+    <AssemblyName>nixi.SelectiveHUDHider</AssemblyName>
     <AssemblyTitle>SelectiveHider</AssemblyTitle>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>

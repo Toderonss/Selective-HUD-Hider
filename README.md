@@ -30,24 +30,25 @@ The Selective HUD Hider mod allows you to selectively hide elements of the game 
 After the first launch of the game, the com file will appear in the BepInEx\config folder.yourname.SelectiveHider.cfg.
 
 ### Basic settings:
-- Toggle Key - the key for switching the "Clean mode" (F1 by default)
-- Check Interval - the frequency of item checks (1.0 recommended)
-- Letterbox - enabling/disabling black bars (Cinema Mode)
+- **Toggle Key** - the key for switching the "Clean mode" (F1 by default)
+- **Check Interval** - the frequency of item checks (1.0 recommended)
+- **Letterbox** - enabling/disabling black bars (Cinema Mode)
 - Basic HUD elements for hiding:
-- BarGroup - strips of health, hunger, thirst
-- Inventory - inventory
-- Prompts - hints (E - take, F - use, etc.)
-- DayNightText - day/night text
-- Reticles - sights in the center of the screen
-- TheFogRises / TheLavaRises - animations of events
-- ConnectionLog - log of player connections
+- **BarGroup** - strips of health, hunger, thirst
+- **Inventory** - inventory
+- **Prompts** - hints (E - take, F - use, etc.)
+- **DayNightText** - day/night text
+- **Reticles** - sights in the center of the screen
+- **TheFogRises / TheLavaRises** - animations of events
+- **ConnectionLog** - log of player connections
 - The Hero interface at the beginning of the biome
 
 ### Custom Stamina Stats:
-- Enabled - enable numeric values
-- ShowPercentage - show percentages (%)
-- FontSize - font size (16 by default)
-- OutlineThickness - the thickness of the text outline
+- **Enabled** – enable digital values of stamina and statuses
+- **ShowPercentage** – show the percentage sign (%) after the values
+- **FontSize** – font size (default is 16)
+- **OutlineThickness** – the thickness of the text outline
+- **MainStaminaVerticalOffset** – the displacement of the main stripe of the stamina upward (in pixels) when Extra Stamina is active (positive value = upward). Allows you to visually separate the main and additional strips.
 
 ### 🔤 Font Information
 #### Custom Font
@@ -106,6 +107,11 @@ Link: [DownedAwareness on Thunderstore](https://thunderstore.io/c/peak/p/LucydDe
 _Function:_ Hides distances from pings
 
 Link: [BetterPingDistance on Thunderstore](https://thunderstore.io/c/peak/p/LucydDemon/BetterPingDistance/)
+
+3. **PhotonPingGUI**
+_Function:_ Hides the ping display interface (PhotonPingGUI mod)
+
+Link: [PhotonPingGUI on Thunderstore](https://thunderstore.io/c/peak/p/lane_ftw/PhotonPingGUI/)
 
 ## 🖥️ Game settings
 Screen resolution:
