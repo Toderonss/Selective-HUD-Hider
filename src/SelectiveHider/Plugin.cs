@@ -122,6 +122,10 @@ namespace SelectiveHider
             private static TextMeshProUGUI _staminaText;
             private static Canvas _canvas;
 
+            private static Vector2 _originalSizeDelta;
+            private static Vector2 _originalAnchoredPosition;
+            private static bool _originalValuesSaved = false;
+
             // Кэшированные ссылки
             private static Character _observedCharacter;
             private static StaminaBar _staminaBar;
@@ -1196,7 +1200,6 @@ namespace SelectiveHider
         private ConfigEntry<bool> _customStaminaShowPercent;
         private ConfigEntry<int> _customStaminaFontSize;
         private ConfigEntry<float> _customStaminaOutline;
-        private static ConfigEntry<float> _mainStaminaVerticalOffsetConfig;
 
         // EXTRA CANVAS
         private ConfigEntry<bool> _canvasBetterPingDistanceConfig;
@@ -1221,34 +1224,10 @@ namespace SelectiveHider
         private float _currentCheckInterval;
         private bool _configsDirty = true;
         private static Dictionary<int, float> _originalStaminaBarY = new Dictionary<int, float>();
+        private static ConfigEntry<bool> _enableExtraStaminaOffset;
         private static Harmony _harmony;
 
         #endregion
-
-        private void ForceUpdateStaminaBarPosition(bool applyOffset)
-        {
-            // Находим все StaminaBar в сцене (обычно один для игрока, но могут быть и другие)
-            StaminaBar[] bars = FindObjectsOfType<StaminaBar>();
-            foreach (StaminaBar bar in bars)
-            {
-                if (bar == null) continue;
-                int id = bar.GetInstanceID();
-                if (!_originalStaminaBarY.ContainsKey(id))
-                {
-                    _originalStaminaBarY[id] = bar.transform.localPosition.y;
-                }
-                float baseY = _originalStaminaBarY[id];
-                float offset = _mainStaminaVerticalOffsetConfig?.Value ?? 0f;
-                bool extraActive = bar.extraBar != null && bar.extraBar.gameObject.activeSelf;
-                float targetY = (extraActive && applyOffset) ? baseY + offset : baseY;
-                // Принудительно устанавливаем позицию без Lerp
-                bar.transform.localPosition = new Vector3(
-                    bar.transform.localPosition.x,
-                    targetY,
-                    bar.transform.localPosition.z
-                );
-            }
-        }
 
         private void Awake()
         {
@@ -1266,16 +1245,75 @@ namespace SelectiveHider
 
             _harmony = new Harmony(Info.Metadata.GUID);
 
-            _harmony.Patch(
-                AccessTools.Method(typeof(StaminaBar), "Update"),
-                postfix: new HarmonyMethod(typeof(SelectiveHiderPlugin), nameof(StaminaBarUpdatePostfix))
-            );
-
             // Подписка на смену сцены для очистки кэша
             UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
 
             // Высокая частота обновления (60 кадров в секунду)
             InvokeRepeating(nameof(UpdateCustomStaminaStats), 0.5f, 0.0167f);
+
+            _harmony.Patch(
+                AccessTools.Method(typeof(GUIManager), "Start"),
+                postfix: new HarmonyMethod(typeof(SelectiveHiderPlugin), nameof(GUIManagerStartPostfix))
+            );
+        }
+
+        private static void GUIManagerStartPostfix()
+        {
+            FixBarGroupStatic();
+        }
+
+        private static void FixBarGroupStatic()
+        {
+            Debug.Log($"[SelectiveHider] FixBarGroupStatic вызван");
+
+            if (GUIManager.instance == null)
+            {
+                Debug.Log("[SelectiveHider] GUIManager.instance == null, выходим");
+                return;
+            }
+
+            if (GUIManager.instance.bar == null)
+            {
+                Debug.Log("[SelectiveHider] GUIManager.instance.bar == null, выходим");
+                return;
+            }
+
+            if (GUIManager.instance.bar.transform.parent == null)
+            {
+                Debug.Log("[SelectiveHider] bar.transform.parent == null, выходим");
+                return;
+            }
+
+            if (_enableExtraStaminaOffset == null)
+            {
+                Debug.Log("[SelectiveHider] _enableExtraStaminaOffset == null, выходим");
+                return;
+            }
+
+            Debug.Log($"[SelectiveHider] _enableExtraStaminaOffset.Value = {_enableExtraStaminaOffset.Value}");
+
+            if (!_enableExtraStaminaOffset.Value)
+            {
+                Debug.Log("[SelectiveHider] Чекбокс выключен, пропускаем поднятие BarGroup");
+                return;
+            }
+
+            var barGroup = GUIManager.instance.bar.transform.parent as RectTransform;
+            if (barGroup == null)
+            {
+                Debug.Log("[SelectiveHider] barGroup == null");
+                return;
+            }
+
+            Debug.Log("[SelectiveHider] Чекбокс включён, поднимаем BarGroup");
+            barGroup.sizeDelta = new Vector2(600f, 600f);
+            barGroup.anchoredPosition = new Vector2(barGroup.anchoredPosition.x, 353f);
+
+            var layout = barGroup.GetComponent<VerticalLayoutGroup>();
+            if (layout != null)
+                layout.spacing = 25f;
+
+            Debug.Log("[SelectiveHider] BarGroup поднят");
         }
 
         private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
@@ -1474,13 +1512,12 @@ namespace SelectiveHider
                 _toggleKeyConfig = Config.Bind("General", "Toggle Key", ToggleKey.F1,
                     new ConfigDescription("Клавиша для переключения Чистого режима.", null, Array.Empty<object>()));
 
-                _mainStaminaVerticalOffsetConfig = Config.Bind("General", "MainStaminaVerticalOffset", 10f,
-                new ConfigDescription("Vertical offset for main stamina bar when extra stamina is active (positive = up).",
-                    new AcceptableValueRange<float>(0f, 50f), Array.Empty<object>()));
-
                 _checkIntervalConfig = Config.Bind("General", "Check Interval", 1f,
                     new ConfigDescription("Частота проверок в чистом режиме (в секундах).",
                         new AcceptableValueRange<float>(0.5f, 3f), Array.Empty<object>()));
+                
+                _enableExtraStaminaOffset = Config.Bind("General", "Enable Extra Stamina Offset", false,
+                    "If enabled, raises the BarGroup on scene load. Requires scene reload to take effect.");
 
                 // Настройка Letterbox
                 _letterboxConfig = Config.Bind("General", "Letterbox", false,
@@ -1927,8 +1964,6 @@ namespace SelectiveHider
 
                 // Мгновенное обновление
                 Canvas.ForceUpdateCanvases();
-                
-                ForceUpdateStaminaBarPosition(true);
 
                 CustomStaminaStats.UpdateAll();
 
@@ -2061,8 +2096,6 @@ namespace SelectiveHider
 
                 // Мгновенное обновление
                 Canvas.ForceUpdateCanvases();
-
-                ForceUpdateStaminaBarPosition(true);
 
                 CustomStaminaStats.UpdateAll();
 
@@ -2416,31 +2449,6 @@ namespace SelectiveHider
             {
                 Logger.LogWarning($"Ошибка EnforceCleanMode: {ex.Message}");
             }
-        }
-        private static float _velocity = 0f;
-
-        private static void StaminaBarUpdatePostfix(StaminaBar __instance)
-        {
-            if (__instance == null) return;
-
-            bool hasExtra = Character.observedCharacter != null && Character.observedCharacter.data.extraStamina > 0.01f;
-            float offset = _mainStaminaVerticalOffsetConfig?.Value ?? 0f;
-
-            float targetY = hasExtra ? -27.5f + offset : -77.5f;
-            float currentY = __instance.transform.localPosition.y;
-
-            // Плавное движение через SmoothDamp
-            float newY = Mathf.SmoothDamp(currentY, targetY, ref _velocity, 0.15f);
-
-            // Если почти достигли цели - ставим точно, чтобы не дрожало
-            if (Mathf.Abs(newY - targetY) < 0.01f)
-                newY = targetY;
-
-            __instance.transform.localPosition = new Vector3(
-                __instance.transform.localPosition.x,
-                newY,
-                __instance.transform.localPosition.z
-            );
         }
     }
 }

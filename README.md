@@ -48,7 +48,7 @@ After the first launch of the game, the com file will appear in the BepInEx\conf
 - **ShowPercentage** – show the percentage sign (%) after the values
 - **FontSize** – font size (default is 16)
 - **OutlineThickness** – the thickness of the text outline
-- **MainStaminaVerticalOffset** – the displacement of the main stripe of the stamina upward (in pixels) when Extra Stamina is active (positive value = upward). Allows you to visually separate the main and additional strips.
+- **Enable extra stamina offset** – When enabled, the mod will raise the entire stamina bar group (`BarGroup`) on scene load. This can be useful if you want to visually separate the main stamina bar from the extra stamina bar.
 
 ### 🔤 Font Information
 #### Custom Font

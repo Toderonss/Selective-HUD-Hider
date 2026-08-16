@@ -1,16 +1,20 @@
 # Changelog
 
+## v1.0.5
+- **Replaced** the old `MainStaminaVerticalOffset` parameter with the new `Enable extra stamina offset` checkbox. The old parameter was unstable and caused conflicts with other mods.
+- **Fixed** integration with PeakStats — now the correct method of checking dependencies is used through `Chainloader.PluginInfos` (for passing moderation of ThunderStore).
+
 ## v1.0.4
-- **Custom Stamina Stats** – полностью переработанный модуль:
-  - Добавлены цифровые значения для **всех** статусов (Injury, Hunger, Cold, Poison, Crab, Curse, Drowsy, Weight, Hot, Thorns, Spores, Web, Arrow, FlyTrap, Petrify).
-  - Добавлено отображение цифр для **Extra Stamina** (дополнительная выносливость).
-  - Цифры позиционируются под соответствующими полосками (включая Petrify в Extra Stamina Bar).
-  - Цвета текстов соответствуют цветам полосок статусов.
-- **Новая настройка:** `MainStaminaVerticalOffset` – позволяет поднимать основную полоску стамины вверх, когда активна Extra Stamina, для лучшей визуальной разделения.
-- **Интеграция с PhotonPingCanvas** – добавлена поддержка скрытия интерфейса пинга (мод PhotonPingGUI).
+- **Custom Stamina Stats** – completely redesigned module:
+- Added numeric values for **all** statuses (Injury, Hunger, Cold, Poison, Crab, Curse, Drowsy, Weight, Hot, Thorns, Spores, Web, Arrow, FlyTrap, Petrify).
+- Added digit display for **Extra Stamina** (extra stamina).
+- The numbers are positioned under the corresponding stripes (including Petrify in the Extra Stamina Bar).
+- The colors of the texts correspond to the colors of the status bars.
+- **New setting:** `MainStaminaVerticalOffset' – allows you to raise the main strip of stamina up when Extra Stamina is active, for better visual separation.
+- **Integration with PhotonPingCanvas** – added support for hiding the ping interface (PhotonPingGUI mod).
 
 ## v1.0.3
-- Integration with PeakStats (исправлена проблема с исчезновением баров выносливости других игроков).
+- Integration with PeakStats (fixed an issue with other players' stamina bars disappearing).
 
 ## v1.0.2
 - Fixed a bug where **Letterbox** would not hide after exiting Clean Mode.

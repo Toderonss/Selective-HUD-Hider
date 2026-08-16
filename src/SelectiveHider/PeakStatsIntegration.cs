@@ -111,12 +111,13 @@ namespace SelectiveHider.Patches
             {
                 _logger.LogInfo("Начинаем инициализацию интеграции с PeakStats...");
 
-                var peakStatsAssembly = FindPeakStatsAssemblyInLoadedAssemblies();
-
-                if (peakStatsAssembly == null)
+                if (!BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue("com.sinai.PeakStats", out var pluginInfo))
                 {
-                    peakStatsAssembly = LoadPeakStatsAssemblyFromFile();
+                    _logger.LogWarning("PeakStats не найден. Интеграция отключена.");
+                    return;
                 }
+
+                var peakStatsAssembly = pluginInfo.Instance.GetType().Assembly;
 
                 if (peakStatsAssembly == null)
                 {
@@ -613,107 +614,6 @@ namespace SelectiveHider.Patches
                 // Сбрасываем кэш при ошибке
                 _cachedVerticalLayoutGroup = null;
                 _cachedContentSizeFitter = null;
-            }
-        }
-
-        /// <summary>
-        /// Ищет сборку PeakStats в уже загруженных сборках
-        /// </summary>
-        private Assembly FindPeakStatsAssemblyInLoadedAssemblies()
-        {
-            try
-            {
-                var allAssemblies = AppDomain.CurrentDomain.GetAssemblies();
-
-                foreach (var assembly in allAssemblies)
-                {
-                    try
-                    {
-                        var assemblyName = assembly.GetName().Name;
-
-                        if (assemblyName == "PeakStats" ||
-                            assemblyName == "nickklmao.peakstats" ||
-                            assemblyName == "nickklmao-PeakStats" ||
-                            (assemblyName.Contains("PeakStats") && !assemblyName.Contains("PEAK")))
-                        {
-                            var testType = assembly.GetType("PeakStats.MonoBehaviours.ProximityStaminaManager");
-                            if (testType != null)
-                            {
-                                return assembly;
-                            }
-                        }
-                    }
-                    catch { }
-                }
-
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Загружает сборку PeakStats из файла
-        /// </summary>
-        private Assembly LoadPeakStatsAssemblyFromFile()
-        {
-            try
-            {
-                string pluginsPath = Path.Combine(Paths.BepInExRootPath, "plugins");
-
-                if (!Directory.Exists(pluginsPath))
-                {
-                    return null;
-                }
-
-                string[] possiblePaths = new string[]
-                {
-                    Path.Combine(pluginsPath, "PeakStats.dll"),
-                    Path.Combine(pluginsPath, "nickklmao-PeakStats", "PeakStats.dll"),
-                    Path.Combine(pluginsPath, "nickklmao.peakstats", "PeakStats.dll"),
-                    Path.Combine(pluginsPath, "PeakStats", "PeakStats.dll")
-                };
-
-                foreach (var path in possiblePaths)
-                {
-                    if (File.Exists(path))
-                    {
-                        try
-                        {
-                            var assembly = Assembly.LoadFrom(path);
-                            var testType = assembly.GetType("PeakStats.MonoBehaviours.ProximityStaminaManager");
-                            if (testType != null)
-                            {
-                                return assembly;
-                            }
-                        }
-                        catch { }
-                    }
-                }
-
-                var allDlls = Directory.GetFiles(pluginsPath, "PeakStats.dll", SearchOption.AllDirectories);
-
-                foreach (var dllPath in allDlls)
-                {
-                    try
-                    {
-                        var assembly = Assembly.LoadFrom(dllPath);
-                        var testType = assembly.GetType("PeakStats.MonoBehaviours.ProximityStaminaManager");
-                        if (testType != null)
-                        {
-                            return assembly;
-                        }
-                    }
-                    catch { }
-                }
-
-                return null;
-            }
-            catch
-            {
-                return null;
             }
         }
 
