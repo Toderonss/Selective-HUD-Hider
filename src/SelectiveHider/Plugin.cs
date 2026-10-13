@@ -104,6 +104,91 @@ namespace SelectiveHider
             private static ManualLogSource Logger => BepInEx.Logging.Logger.CreateLogSource("TransparencyManager");
         }
 
+        /// <summary>
+        /// Элементы, активность которых GUIManager.LateUpdate переключает сам (Mute, DyingBar, Spectating).
+        /// SetActive(false) перезаписывается игрой, поэтому прячем их нулевым масштабом в postfix LateUpdate.
+        /// </summary>
+        private static class GameControlledElements
+        {
+            private static readonly Dictionary<Transform, Vector3> _originalScales = new Dictionary<Transform, Vector3>();
+            private static readonly Dictionary<string, Transform> _cachedTransforms = new Dictionary<string, Transform>();
+            private static GUIManager _cachedManager;
+
+            public static bool HasHidden => _originalScales.Count > 0;
+
+            public static void Hide(GUIManager gui, HashSet<string> elementNames)
+            {
+                if (gui == null) return;
+
+                if (_cachedManager != gui)
+                {
+                    _cachedTransforms.Clear();
+                    _cachedManager = gui;
+                }
+
+                foreach (string elementName in elementNames)
+                {
+                    Transform element = GetElement(gui, elementName);
+                    if (element == null) continue;
+
+                    if (!_originalScales.ContainsKey(element))
+                        _originalScales[element] = element.localScale;
+
+                    if (element.localScale != Vector3.zero)
+                        element.localScale = Vector3.zero;
+                }
+
+                // Элементы, которые выключили в конфиге во время чистого режима
+                if (_originalScales.Count > elementNames.Count)
+                {
+                    foreach (var kvp in _cachedTransforms)
+                    {
+                        if (!elementNames.Contains(kvp.Key))
+                            Restore(kvp.Value);
+                    }
+                }
+            }
+
+            public static void RestoreAll()
+            {
+                foreach (var kvp in _originalScales)
+                {
+                    if (kvp.Key != null)
+                        kvp.Key.localScale = kvp.Value;
+                }
+                _originalScales.Clear();
+            }
+
+            public static void ResetCache()
+            {
+                _originalScales.Clear();
+                _cachedTransforms.Clear();
+                _cachedManager = null;
+            }
+
+            private static void Restore(Transform element)
+            {
+                if (element != null && _originalScales.TryGetValue(element, out Vector3 scale))
+                {
+                    element.localScale = scale;
+                    _originalScales.Remove(element);
+                }
+            }
+
+            private static Transform GetElement(GUIManager gui, string elementName)
+            {
+                if (_cachedTransforms.TryGetValue(elementName, out Transform cached) && cached != null)
+                    return cached;
+
+                Transform canvasHud = gui.transform.Find("Canvas_HUD");
+                Transform element = canvasHud != null ? canvasHud.Find(elementName) : null;
+                if (element != null)
+                    _cachedTransforms[elementName] = element;
+
+                return element;
+            }
+        }
+
         #region ИСПРАВЛЕННЫЙ CustomStaminaStats
 
         private static class CustomStaminaStats
@@ -1092,10 +1177,13 @@ namespace SelectiveHider
         {
             "MoraleBoost",
             "ConnectionLog",
-            "Spectating",
         };
 
+        // Элементы, которыми управляет GUIManager.LateUpdate (скрываются через GameControlledElements)
+        private static HashSet<string> _gameControlledElements = new HashSet<string>();
+
         private static PeakStatsIntegration _peakStatsIntegration;
+        private static PeakStatsExIntegration _peakStatsExIntegration;
 
         public enum ToggleKey
         {
@@ -1187,6 +1275,9 @@ namespace SelectiveHider
         private ConfigEntry<bool> _dayNightTextConfig;
         private ConfigEntry<bool> _reticlesConfig;
         private ConfigEntry<bool> _spectatingConfig;
+        private ConfigEntry<bool> _muteConfig;
+        private ConfigEntry<bool> _dyingBarConfig;
+        private ConfigEntry<bool> _ropeConfig;
         private ConfigEntry<bool> _heroConfig;
         private ConfigEntry<bool> _theFogRisesConfig;
         private ConfigEntry<bool> _theLavaRisesConfig;
@@ -1205,6 +1296,7 @@ namespace SelectiveHider
         private ConfigEntry<bool> _canvasBetterPingDistanceConfig;
         private ConfigEntry<bool> _canvasPassedOutMarkersConfig;
         private ConfigEntry<bool> _canvasPhotonPingCanvasConfig;
+        private ConfigEntry<bool> _peakStatsExTeammateBarsConfig;
 
         private HashSet<string> _managedElements = new HashSet<string>();
         private static Dictionary<string, GameObject> _cachedExtraCanvases = new Dictionary<string, GameObject>();
@@ -1255,11 +1347,39 @@ namespace SelectiveHider
                 AccessTools.Method(typeof(GUIManager), "Start"),
                 postfix: new HarmonyMethod(typeof(SelectiveHiderPlugin), nameof(GUIManagerStartPostfix))
             );
+
+            _harmony.Patch(
+                AccessTools.Method(typeof(GUIManager), "LateUpdate"),
+                postfix: new HarmonyMethod(typeof(SelectiveHiderPlugin), nameof(GUIManagerLateUpdatePostfix))
+            );
+        }
+
+        private void Start()
+        {
+            // К Start все плагины уже загружены, поэтому PeakStatsEx можно найти независимо от порядка загрузки
+            _peakStatsExIntegration = new PeakStatsExIntegration();
+            _peakStatsExIntegration.Initialize(() => _isCleanModeActive && _peakStatsExTeammateBarsConfig.Value);
         }
 
         private static void GUIManagerStartPostfix()
         {
             FixBarGroupStatic();
+        }
+
+        // Выполняется после того, как игра выставила активность Mute/DyingBar/Spectating
+        private static void GUIManagerLateUpdatePostfix(GUIManager __instance)
+        {
+            try
+            {
+                if (_isCleanModeActive)
+                    GameControlledElements.Hide(__instance, _gameControlledElements);
+                else if (GameControlledElements.HasHidden)
+                    GameControlledElements.RestoreAll();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[SelectiveHider] GUIManagerLateUpdatePostfix: {ex.Message}");
+            }
         }
 
         private static void FixBarGroupStatic()
@@ -1329,6 +1449,7 @@ namespace SelectiveHider
             _currentlyHidden.Clear();
             _extraCanvasOriginalStates.Clear();
             _originalStaminaBarY.Clear();
+            GameControlledElements.ResetCache();
 
             ForceShowCustomStaminaOnGameScenes(scene);
 
@@ -1542,6 +1663,12 @@ namespace SelectiveHider
                     "Hide sights in the center of the screen");
                 _spectatingConfig = Config.Bind("Main HUD", "Spectating", true,
                     "Hide the switching interface behind players at death");
+                _muteConfig = Config.Bind("Main HUD", "Mute", true,
+                    "Hide the microphone mute icon");
+                _dyingBarConfig = Config.Bind("Main HUD", "DyingBar", true,
+                    "Hide the dying bar when passed out or dead");
+                _ropeConfig = Config.Bind("Main HUD", "Rope", false,
+                    "Hide the rope interface");
                 _heroConfig = Config.Bind("Main HUD", "Hero", true,
                     "Hide the name interface at the beginning of the biome");
                 _theFogRisesConfig = Config.Bind("Main HUD", "TheFogRises", true,
@@ -1576,6 +1703,8 @@ namespace SelectiveHider
                     "Hide the markers of players who have lost consciousness (mod DownedAwareness)");
                 _canvasPhotonPingCanvasConfig = Config.Bind("Integration with mods", "PhotonPingCanvas", false,
                     "Hide PhotonPingCanvas (mod PhotonPingGUI)");
+                _peakStatsExTeammateBarsConfig = Config.Bind("Integration with mods", "PeakStatsEx Teammate Stamina", true,
+                    "Hide teammates' stamina bars (mod PeakStatsEx)");
 
                 // Инициализируем CustomStaminaStats
                 CustomStaminaStats.Initialize(
@@ -1595,6 +1724,9 @@ namespace SelectiveHider
                 _dayNightTextConfig.SettingChanged += MarkConfigsDirty;
                 _reticlesConfig.SettingChanged += MarkConfigsDirty;
                 _spectatingConfig.SettingChanged += MarkConfigsDirty;
+                _muteConfig.SettingChanged += MarkConfigsDirty;
+                _dyingBarConfig.SettingChanged += MarkConfigsDirty;
+                _ropeConfig.SettingChanged += MarkConfigsDirty;
                 _heroConfig.SettingChanged += MarkConfigsDirty;
                 _theFogRisesConfig.SettingChanged += MarkConfigsDirty;
                 _theLavaRisesConfig.SettingChanged += MarkConfigsDirty;
@@ -1692,6 +1824,8 @@ namespace SelectiveHider
                     _peakStatsIntegration.Cleanup();
                 }
 
+                _peakStatsExIntegration?.Cleanup();
+
                 CancelInvoke(nameof(UpdateCustomStaminaStats));
 
                 // Безопасная отписка
@@ -1730,7 +1864,6 @@ namespace SelectiveHider
             if (_useItemFriendTFConfig.Value) _managedElements.Add("UseItemFriendTF");
             if (_dayNightTextConfig.Value) _managedElements.Add("DayNightText");
             if (_reticlesConfig.Value) _managedElements.Add("Reticles");
-            if (_spectatingConfig.Value) _managedElements.Add("Spectating");
             if (_heroConfig.Value) _managedElements.Add("Hero");
             if (_theFogRisesConfig.Value) _managedElements.Add("TheFogRises");
             if (_theLavaRisesConfig.Value) _managedElements.Add("TheLavaRises");
@@ -1738,6 +1871,12 @@ namespace SelectiveHider
             if (_connectionLogConfig.Value) _managedElements.Add("ConnectionLog");
             if (_ascentUIConfig.Value) _managedElements.Add("AscentUI");
             if (_timerHeightUIConfig.Value) _managedElements.Add("Timer & Height UI");
+
+            _gameControlledElements.Clear();
+            if (_spectatingConfig.Value) _gameControlledElements.Add("Spectating");
+            if (_muteConfig.Value) _gameControlledElements.Add("Mute");
+            if (_dyingBarConfig.Value) _gameControlledElements.Add("DyingBar");
+            if (_ropeConfig.Value) _gameControlledElements.Add("Rope");
         }
 
         private float _peakStatsUpdateInterval = 1f; // Раз в секунду
@@ -2035,6 +2174,12 @@ namespace SelectiveHider
                         }
                     }
                 }
+
+                // Возвращаем масштаб Mute/DyingBar/Spectating
+                GameControlledElements.RestoreAll();
+
+                // Возвращаем бары стамины тиммейтов (PeakStatsEx)
+                PeakStatsExIntegration.RestoreAll();
 
                 // Восстанавливаем Canvas_Hero
                 ManageCanvasHero(false);
