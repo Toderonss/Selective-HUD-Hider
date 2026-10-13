@@ -17,7 +17,7 @@ using SelectiveHider.Patches;
 
 namespace SelectiveHider
 {
-    [BepInPlugin("nixi.SelectiveHider", "Selective HUD Hider", "1.0.4")]
+    [BepInPlugin("nixi.SelectiveHider", "Selective HUD Hider", "1.0.6")]
     public class SelectiveHiderPlugin : BaseUnityPlugin
     {
         private static class TransparencyManager
