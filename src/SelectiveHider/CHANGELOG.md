@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.6
+- Added support for the `PeakStatsEx` mod
+Now, when activating Clean Mode (F1 by default), it also disappears.:
+- The "Muta" icon
+- Scale of transformation into a corpse "DyingBar"
+- Rope GUI (to the left of the interface). Disabled by default
+
 ## v1.0.5
 - **Replaced** the old `MainStaminaVerticalOffset` parameter with the new `Enable extra stamina offset` checkbox. The old parameter was unstable and caused conflicts with other mods.
 - **Fixed** integration with PeakStats — now the correct method of checking dependencies is used through `Chainloader.PluginInfos` (for passing moderation of ThunderStore).
